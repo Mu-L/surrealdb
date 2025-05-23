@@ -1,10 +1,11 @@
-use crate::err::Error;
-use crate::sql::Value as CoreValue;
-use revision::revisioned;
+use crate::expr::Value as CoreValue;
+use crate::sql::statement::Statement;
+use anyhow::Result;
 use revision::Revisioned;
-use serde::ser::SerializeStruct;
+use revision::revisioned;
 use serde::Deserialize;
 use serde::Serialize;
+use serde::ser::SerializeStruct;
 use std::time::Duration;
 
 pub(crate) const TOKEN: &str = "$surrealdb::private::sql::Response";
@@ -29,12 +30,22 @@ impl QueryType {
 	}
 }
 
+impl From<&Statement> for QueryType {
+	fn from(stmt: &Statement) -> Self {
+		match stmt {
+			Statement::Live(_) => QueryType::Live,
+			Statement::Kill(_) => QueryType::Kill,
+			_ => QueryType::Other,
+		}
+	}
+}
+
 /// The return value when running a query set on the database.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct Response {
 	pub time: Duration,
-	pub result: Result<CoreValue, Error>,
+	pub result: Result<CoreValue>,
 	// Record the query type in case processing the response is necessary (such as tracking live queries).
 	pub query_type: QueryType,
 }
@@ -46,7 +57,7 @@ impl Response {
 	}
 
 	/// Retrieve the response as a normal result
-	pub fn output(self) -> Result<CoreValue, Error> {
+	pub fn output(self) -> Result<CoreValue> {
 		self.result
 	}
 }
@@ -123,14 +134,12 @@ impl Revisioned for Response {
 	fn serialize_revisioned<W: std::io::Write>(
 		&self,
 		writer: &mut W,
-	) -> std::result::Result<(), revision::Error> {
+	) -> Result<(), revision::Error> {
 		QueryMethodResponse::from(self).serialize_revisioned(writer)
 	}
 
 	#[inline]
-	fn deserialize_revisioned<R: std::io::Read>(
-		_reader: &mut R,
-	) -> std::result::Result<Self, revision::Error> {
+	fn deserialize_revisioned<R: std::io::Read>(_reader: &mut R) -> Result<Self, revision::Error> {
 		unreachable!("deserialising `Response` directly is not supported")
 	}
 
